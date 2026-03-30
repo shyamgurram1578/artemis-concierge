@@ -1,0 +1,902 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Artemis Concierge</title>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&family=Playfair+Display:ital,wght@0,700;1,700&display=swap" rel="stylesheet"/>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden;font-family:'Inter',sans-serif}
+:root{--primary:#f5b731;--accent:#e0a020;--bg:#0c1a0d;--card:rgba(245,183,49,.04);--text:#fefce8}
+.display-name{font-family:'Playfair Display',Georgia,serif}
+@keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+.fade-up{animation:fadeUp .5s ease both}
+@keyframes pulseBorder{0%,100%{box-shadow:0 0 0 0 color-mix(in srgb,var(--primary) 40%,transparent)}50%{box-shadow:0 0 0 8px color-mix(in srgb,var(--primary) 0%,transparent)}}
+.pulse-card{animation:pulseBorder 2s ease-in-out infinite}
+.no-sb::-webkit-scrollbar{display:none}
+.no-sb{-ms-overflow-style:none;scrollbar-width:none}
+
+/* Modal overlay */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);backdrop-filter:blur(6px);z-index:100;display:flex;align-items:center;justify-content:center}
+.modal-box{background:#1e293b;border-radius:18px;padding:36px;width:440px;border:1px solid #334155;position:relative;max-height:90vh;overflow-y:auto}
+
+/* Dashboard */
+.dash-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:14px 0;border-bottom:1px solid #1e2d1e}
+.dash-row:last-child{border-bottom:none}
+.dash-label{color:#94a3b8;font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:1px;display:flex;align-items:center;gap:8px}
+.dash-actions{display:flex;gap:10px;align-items:center}
+
+/* Form inputs */
+.f-input{width:100%;background:#0f172a;border:1px solid #334155;border-radius:8px;padding:10px 14px;color:#f8fafc;font-size:14px;outline:none;font-family:inherit;transition:border-color .2s}
+.f-input:focus{border-color:var(--primary)}
+.f-label{display:block;color:#94a3b8;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-bottom:5px}
+.f-card{background:#1e293b;border-radius:12px;padding:18px;border:1px solid #334155}
+
+/* Buttons */
+.btn{border:none;border-radius:10px;padding:10px 22px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;transition:opacity .2s}
+.btn:hover{opacity:.88}
+.btn-primary{background:var(--primary);color:#1a1a1a}
+.btn-ghost{background:rgba(255,255,255,.06);color:#94a3b8;border:1px solid #334155}
+.btn-danger{background:rgba(239,68,68,.15);color:#f87171;border:1px solid rgba(239,68,68,.3)}
+.btn-success{background:rgba(34,197,94,.15);color:#4ade80;border:1px solid rgba(34,197,94,.3)}
+.btn-upload{background:rgba(245,183,49,.12);color:var(--primary);border:1px solid rgba(245,183,49,.3);border-radius:8px;padding:8px 16px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap}
+
+/* Tabs */
+.tab-strip{display:flex;border-bottom:1px solid #334155}
+.tab-btn{padding:12px 22px;background:none;border:none;border-bottom:3px solid transparent;color:#64748b;font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:1px;cursor:pointer;font-family:inherit;transition:color .2s}
+.tab-btn.active{border-bottom-color:var(--primary);color:#f8fafc}
+
+/* Table */
+.data-table{width:100%;border-collapse:collapse}
+.data-table th{background:#1e293b;color:#64748b;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;padding:10px 14px;text-align:left;border-bottom:1px solid #334155}
+.data-table td{padding:12px 14px;border-bottom:1px solid rgba(255,255,255,.04);color:#f8fafc;font-size:14px;vertical-align:middle}
+.data-table tr:hover td{background:rgba(255,255,255,.02)}
+
+/* Badge */
+.badge{border-radius:20px;padding:3px 10px;font-size:11px;font-weight:700}
+.badge-green{background:rgba(34,197,94,.12);color:#4ade80;border:1px solid rgba(34,197,94,.2)}
+.badge-red{background:rgba(239,68,68,.12);color:#f87171;border:1px solid rgba(239,68,68,.2)}
+.badge-amber{background:rgba(245,183,49,.12);color:#f5b731;border:1px solid rgba(245,183,49,.2)}
+
+/* Alert */
+.alert-warn{background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.25);border-radius:10px;padding:14px 16px;color:#fbbf24;font-size:13px;line-height:1.6}
+
+/* Carousel fade */
+@keyframes ticker{from{transform:translateX(100vw)}to{transform:translateX(-100%)}}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const {useState,useEffect,useRef,useCallback,useMemo}=React;
+
+/* ═══════════════════ CONSTANTS ═══════════════════ */
+const LOGO_B64 = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA0NjAgMjIwIiB3aWR0aD0iNDYwIiBoZWlnaHQ9IjIyMCI+CiAgPHJlY3Qgd2lkdGg9IjQ2MCIgaGVpZ2h0PSIyMjAiIHJ4PSIxMCIgZmlsbD0iI2Y1YjczMSIvPgogIDxyZWN0IHg9IjEwIiB5PSIxMCIgd2lkdGg9IjQ0MCIgaGVpZ2h0PSIyMDAiIHJ4PSI2IiBmaWxsPSJub25lIiBzdHJva2U9IiNjOTkyMGYiIHN0cm9rZS13aWR0aD0iMi41IiBzdHJva2UtZGFzaGFycmF5PSIxMCw1Ii8+CiAgPCEtLSBTY2FsbG9wIGRvdHMgdG9wIC0tPgogIDxnIGZpbGw9IiNjOTkyMGYiIG9wYWNpdHk9IjAuODUiPgogICAgPGNpcmNsZSBjeD0iMjIiIGN5PSI1IiByPSI0LjUiLz48Y2lyY2xlIGN4PSI0NCIgY3k9IjUiIHI9IjQuNSIvPjxjaXJjbGUgY3g9IjY2IiBjeT0iNSIgcj0iNC41Ii8+PGNpcmNsZSBjeD0iODgiIGN5PSI1IiByPSI0LjUiLz48Y2lyY2xlIGN4PSIxMTAiIGN5PSI1IiByPSI0LjUiLz48Y2lyY2xlIGN4PSIxMzIiIGN5PSI1IiByPSI0LjUiLz48Y2lyY2xlIGN4PSIxNTQiIGN5PSI1IiByPSI0LjUiLz48Y2lyY2xlIGN4PSIxNzYiIGN5PSI1IiByPSI0LjUiLz48Y2lyY2xlIGN4PSIxOTgiIGN5PSI1IiByPSI0LjUiLz48Y2lyY2xlIGN4PSIyMjAiIGN5PSI1IiByPSI0LjUiLz48Y2lyY2xlIGN4PSIyNDIiIGN5PSI1IiByPSI0LjUiLz48Y2lyY2xlIGN4PSIyNjQiIGN5PSI1IiByPSI0LjUiLz48Y2lyY2xlIGN4PSIyODYiIGN5PSI1IiByPSI0LjUiLz48Y2lyY2xlIGN4PSIzMDgiIGN5PSI1IiByPSI0LjUiLz48Y2lyY2xlIGN4PSIzMzAiIGN5PSI1IiByPSI0LjUiLz48Y2lyY2xlIGN4PSIzNTIiIGN5PSI1IiByPSI0LjUiLz48Y2lyY2xlIGN4PSIzNzQiIGN5PSI1IiByPSI0LjUiLz48Y2lyY2xlIGN4PSIzOTYiIGN5PSI1IiByPSI0LjUiLz48Y2lyY2xlIGN4PSI0MTgiIGN5PSI1IiByPSI0LjUiLz48Y2lyY2xlIGN4PSI0NDAiIGN5PSI1IiByPSI0LjUiLz4KICAgIDxjaXJjbGUgY3g9IjIyIiBjeT0iMjE1IiByPSI0LjUiLz48Y2lyY2xlIGN4PSI0NCIgY3k9IjIxNSIgcj0iNC41Ii8+PGNpcmNsZSBjeD0iNjYiIGN5PSIyMTUiIHI9IjQuNSIvPjxjaXJjbGUgY3g9Ijg4IiBjeT0iMjE1IiByPSI0LjUiLz48Y2lyY2xlIGN4PSIxMTAiIGN5PSIyMTUiIHI9IjQuNSIvPjxjaXJjbGUgY3g9IjEzMiIgY3k9IjIxNSIgcj0iNC41Ii8+PGNpcmNsZSBjeD0iMTU0IiBjeT0iMjE1IiByPSI0LjUiLz48Y2lyY2xlIGN4PSIxNzYiIGN5PSIyMTUiIHI9IjQuNSIvPjxjaXJjbGUgY3g9IjE5OCIgY3k9IjIxNSIgcj0iNC41Ii8+PGNpcmNsZSBjeD0iMjIwIiBjeT0iMjE1IiByPSI0LjUiLz48Y2lyY2xlIGN4PSIyNDIiIGN5PSIyMTUiIHI9IjQuNSIvPjxjaXJjbGUgY3g9IjI2NCIgY3k9IjIxNSIgcj0iNC41Ii8+PGNpcmNsZSBjeD0iMjg2IiBjeT0iMjE1IiByPSI0LjUiLz48Y2lyY2xlIGN4PSIzMDgiIGN5PSIyMTUiIHI9IjQuNSIvPjxjaXJjbGUgY3g9IjMzMCIgY3k9IjIxNSIgcj0iNC41Ii8+PGNpcmNsZSBjeD0iMzUyIiBjeT0iMjE1IiByPSI0LjUiLz48Y2lyY2xlIGN4PSIzNzQiIGN5PSIyMTUiIHI9IjQuNSIvPjxjaXJjbGUgY3g9IjM5NiIgY3k9IjIxNSIgcj0iNC41Ii8+PGNpcmNsZSBjeD0iNDE4IiBjeT0iMjE1IiByPSI0LjUiLz48Y2lyY2xlIGN4PSI0NDAiIGN5PSIyMTUiIHI9IjQuNSIvPgogICAgPGNpcmNsZSBjeD0iNSIgY3k9IjIyIiByPSI0LjUiLz48Y2lyY2xlIGN4PSI1IiBjeT0iNDQiIHI9IjQuNSIvPjxjaXJjbGUgY3g9IjUiIGN5PSI2NiIgcj0iNC41Ii8+PGNpcmNsZSBjeD0iNSIgY3k9Ijg4IiByPSI0LjUiLz48Y2lyY2xlIGN4PSI1IiBjeT0iMTEwIiByPSI0LjUiLz48Y2lyY2xlIGN4PSI1IiBjeT0iMTMyIiByPSI0LjUiLz48Y2lyY2xlIGN4PSI1IiBjeT0iMTU0IiByPSI0LjUiLz48Y2lyY2xlIGN4PSI1IiBjeT0iMTc2IiByPSI0LjUiLz48Y2lyY2xlIGN4PSI1IiBjeT0iMTk4IiByPSI0LjUiLz4KICAgIDxjaXJjbGUgY3g9IjQ1NSIgY3k9IjIyIiByPSI0LjUiLz48Y2lyY2xlIGN4PSI0NTUiIGN5PSI0NCIgcj0iNC41Ii8+PGNpcmNsZSBjeD0iNDU1IiBjeT0iNjYiIHI9IjQuNSIvPjxjaXJjbGUgY3g9IjQ1NSIgY3k9Ijg4IiByPSI0LjUiLz48Y2lyY2xlIGN4PSI0NTUiIGN5PSIxMTAiIHI9IjQuNSIvPjxjaXJjbGUgY3g9IjQ1NSIgY3k9IjEzMiIgcj0iNC41Ii8+PGNpcmNsZSBjeD0iNDU1IiBjeT0iMTU0IiByPSI0LjUiLz48Y2lyY2xlIGN4PSI0NTUiIGN5PSIxNzYiIHI9IjQuNSIvPjxjaXJjbGUgY3g9IjQ1NSIgY3k9IjE5OCIgcj0iNC41Ii8+CiAgPC9nPgogIDwhLS0gQmFuYW5hIHRyZWUgdHJ1bmsgLS0+CiAgPHJlY3QgeD0iMzU1IiB5PSIxMjAiIHdpZHRoPSIyMiIgaGVpZ2h0PSI5MCIgcng9IjYiIGZpbGw9IiM3YWIwMzAiLz4KICA8IS0tIEJhbmFuYSBjbHVzdGVyIC8gZmxvd2VyIC0tPgogIDxlbGxpcHNlIGN4PSIzNTAiIGN5PSIxNTgiIHJ4PSIxMSIgcnk9IjI2IiBmaWxsPSIjZDRhMDE3IiB0cmFuc2Zvcm09InJvdGF0ZSgtMTggMzUwIDE1OCkiLz4KICA8ZWxsaXBzZSBjeD0iMzU2IiBjeT0iMTQ4IiByeD0iOSIgcnk9IjIxIiBmaWxsPSIjYzQ5MDBlIiB0cmFuc2Zvcm09InJvdGF0ZSgtMTIgMzU2IDE0OCkiLz4KICA8ZWxsaXBzZSBjeD0iMzQ2IiBjeT0iMTc4IiByeD0iOCIgcnk9IjE2IiBmaWxsPSIjZTA2MDkwIiB0cmFuc2Zvcm09InJvdGF0ZSgyMiAzNDYgMTc4KSIvPgogIDwhLS0gTGVhdmVzIC0tPgogIDxlbGxpcHNlIGN4PSIzNzAiIGN5PSI2OCIgcng9IjU4IiByeT0iMjQiIGZpbGw9IiMzZDhjMmEiIHRyYW5zZm9ybT0icm90YXRlKC0zNSAzNzAgNjgpIi8+CiAgPGxpbmUgeDE9IjM2NyIgeTE9IjQyIiB4Mj0iMzczIiB5Mj0iOTQiIHN0cm9rZT0iIzJhNmUxZSIgc3Ryb2tlLXdpZHRoPSIyIi8+CiAgPGVsbGlwc2UgY3g9IjQwMCIgY3k9IjUyIiByeD0iNTIiIHJ5PSIyMiIgZmlsbD0iIzMwNjgyMCIgdHJhbnNmb3JtPSJyb3RhdGUoLTYyIDQwMCA1MikiLz4KICA8bGluZSB4MT0iMzk1IiB5MT0iMjgiIHgyPSI0MDUiIHkyPSI3NiIgc3Ryb2tlPSIjMmE2ZTFlIiBzdHJva2Utd2lkdGg9IjIiLz4KICA8ZWxsaXBzZSBjeD0iMzQyIiBjeT0iNjAiIHJ4PSI0NCIgcnk9IjE5IiBmaWxsPSIjNGZhMDMyIiB0cmFuc2Zvcm09InJvdGF0ZSgtOCAzNDIgNjApIi8+CiAgPGxpbmUgeDE9IjM0MCIgeTE9IjQyIiB4Mj0iMzQ0IiB5Mj0iNzgiIHN0cm9rZT0iIzJhNmUxZSIgc3Ryb2tlLXdpZHRoPSIyIi8+CiAgPGVsbGlwc2UgY3g9IjQxNSIgY3k9IjkwIiByeD0iMzgiIHJ5PSIxNiIgZmlsbD0iIzMwNjgyMCIgdHJhbnNmb3JtPSJyb3RhdGUoLTg1IDQxNSA5MCkiLz4KICA8ZWxsaXBzZSBjeD0iMzYwIiBjeT0iMTAwIiByeD0iMjgiIHJ5PSIxMyIgZmlsbD0iIzVhYjAzYSIgdHJhbnNmb3JtPSJyb3RhdGUoLTIwIDM2MCAxMDApIi8+CiAgPCEtLSBTaW1wbHkgdGV4dCAtLT4KICA8dGV4dCB4PSIyOCIgeT0iOTgiIGZvbnQtZmFtaWx5PSJHZW9yZ2lhLCdQYWxhdGlubyBMaW5vdHlwZScsc2VyaWYiIGZvbnQtc2l6ZT0iNzIiIGZvbnQtd2VpZ2h0PSJib2xkIiBmb250LXN0eWxlPSJpdGFsaWMiIGZpbGw9IiMxYTU1MjAiPlNpbXBseTwvdGV4dD4KICA8IS0tIFNvdXRoIHRleHQgLS0+CiAgPHRleHQgeD0iMjgiIHk9IjE3NCIgZm9udC1mYW1pbHk9Ikdlb3JnaWEsJ1BhbGF0aW5vIExpbm90eXBlJyxzZXJpZiIgZm9udC1zaXplPSI3MiIgZm9udC13ZWlnaHQ9ImJvbGQiIGZvbnQtc3R5bGU9Iml0YWxpYyIgZmlsbD0iIzFhNTUyMCI+U291dGg8L3RleHQ+CiAgPCEtLSBUYWdsaW5lIC0tPgogIDx0ZXh0IHg9IjI4IiB5PSIyMDQiIGZvbnQtZmFtaWx5PSJBcmlhbCxIZWx2ZXRpY2Esc2Fucy1zZXJpZiIgZm9udC1zaXplPSIxOSIgZm9udC13ZWlnaHQ9ImJvbGQiIGZpbGw9IiMyYTYwMTgiIGxldHRlci1zcGFjaW5nPSIxIj5QVVJFIElORElBTiBWRUdFVEFSSUFOPC90ZXh0Pgo8L3N2Zz4=";
+
+const DEFAULT_SPECIALS=[
+  {id:"s1",imageUrl:"https://images.unsplash.com/photo-1589301760014-d929f3979dbc?w=900&q=80",itemName:"Masala Dosa",price:"$13",caption:"Crispy golden crepe with spiced potato filling & chutneys"},
+  {id:"s2",imageUrl:"https://images.unsplash.com/photo-1565557623262-b51c2513a641?w=900&q=80",itemName:"Benne Dosa",price:"$12",caption:"Melt-in-your-mouth butter dosa, Bengaluru style"},
+  {id:"s3",imageUrl:"https://images.unsplash.com/photo-1567188040759-fb8a883dc6d8?w=900&q=80",itemName:"Filter Coffee",price:"$4",caption:"Traditional South Indian decoction with frothy milk"},
+  {id:"s4",imageUrl:"https://images.unsplash.com/photo-1630383249896-424e482df921?w=900&q=80",itemName:"Idli Sambar",price:"$10",caption:"Fluffy steamed rice cakes with piping hot sambar & chutney"},
+  {id:"s5",imageUrl:"https://images.unsplash.com/photo-1627894005672-ad180e44cd18?w=900&q=80",itemName:"Ven Pongal",price:"$11",caption:"Creamy rice & lentil comfort dish with ghee & pepper"},
+];
+
+const DEFAULT_RESTAURANT_TEMPLATE={
+  tagline:"Pure Indian Vegetarian",logoUrl:"",
+  primaryColor:"#f5b731",bgColor:"#0c1a0d",
+  specials:[],
+  toastCreds:{clientId:"",clientSecret:"",locationId:"",webhookSecret:""},
+  layout:{headerHeight:18,specialsWidth:50,waitlistWidth:50},
+  active:true,createdAt:new Date().toISOString()
+};
+
+const NAMES=["Krishnan","Sharma","Patel","Venkat","Iyer","Reddy","Subramanian","Nair","Pillai","Chandra","Srinivas","Menon","Rajan","Johnson","Kumar"];
+const SIZES=[2,3,4,2,5,2,3,4,2,6,3,2,4,2,3];
+const BASE_WAITS=[5,10,15,20,25,30,35,40,45,50,55,60,65,70,75];
+
+/* ═══════════════════ DATA LAYER (localStorage) ═══════════════════ */
+const DEFAULT_USERS=[
+  {id:"admin",username:"admin",password:"admin123",role:"admin",active:true,createdAt:"2024-01-01"},
+  {id:"u1",username:"simplysouth",password:"demo123",role:"owner",restaurantId:"r1",active:true,createdAt:"2024-01-01"},
+];
+const DEFAULT_RESTAURANTS=[
+  {id:"r1",ownerId:"u1",name:"Simply South",...DEFAULT_RESTAURANT_TEMPLATE,
+   logoUrl:LOGO_B64,primaryColor:"#f5b731",bgColor:"#0c1a0d",tagline:"Pure Indian Vegetarian",specials:DEFAULT_SPECIALS}
+];
+
+const DB={
+  getUsers(){try{const s=localStorage.getItem("artemis_users");return s?JSON.parse(s):DEFAULT_USERS}catch{return DEFAULT_USERS}},
+  saveUsers(u){try{localStorage.setItem("artemis_users",JSON.stringify(u))}catch(e){console.warn("Storage full")}},
+  getRestaurants(){try{const s=localStorage.getItem("artemis_restaurants");return s?JSON.parse(s):DEFAULT_RESTAURANTS}catch{return DEFAULT_RESTAURANTS}},
+  saveRestaurants(r){try{localStorage.setItem("artemis_restaurants",JSON.stringify(r))}catch(e){console.warn("Storage full")}},
+  updateRestaurant(id,updates){const rs=this.getRestaurants();const i=rs.findIndex(r=>r.id===id);if(i>=0){rs[i]={...rs[i],...updates};this.saveRestaurants(rs);return rs[i]}return null},
+  getRestaurant(id){return this.getRestaurants().find(r=>r.id===id)},
+};
+
+function doLogin(username,password,roleFilter){
+  const user=DB.getUsers().find(u=>
+    u.username.toLowerCase()===username.toLowerCase()&&
+    u.password===password&&
+    (roleFilter==="any"||u.role===roleFilter)&&
+    u.active!==false
+  );return user||null;
+}
+
+async function resizeImage(file,maxW=900,maxH=700,q=0.82){
+  return new Promise(resolve=>{
+    const reader=new FileReader();
+    reader.onload=e=>{
+      const img=new Image();
+      img.onload=()=>{
+        const scale=Math.min(maxW/img.width,maxH/img.height,1);
+        const cv=document.createElement("canvas");
+        cv.width=Math.round(img.width*scale);
+        cv.height=Math.round(img.height*scale);
+        cv.getContext("2d").drawImage(img,0,0,cv.width,cv.height);
+        resolve(cv.toDataURL("image/jpeg",q));
+      };img.src=e.target.result;
+    };reader.readAsDataURL(file);
+  });
+}
+
+function generateWaitlist(){
+  const count=6+Math.floor(Math.random()*6);
+  return NAMES.slice(0,count).map((name,i)=>({id:`g${i}`,name,size:SIZES[i],waitTime:BASE_WAITS[i]+Math.floor(Math.random()*5)}));
+}
+
+function applyTheme(primary,bg){
+  const r=document.documentElement;
+  r.style.setProperty("--primary",primary);
+  r.style.setProperty("--accent",primary);
+  r.style.setProperty("--bg",bg);
+}
+
+/* ═══════════════════ SHARED SUB-COMPONENTS ═══════════════════ */
+function Modal({onClose,title,children,width=440}){
+  return(
+    <div className="modal-overlay" onClick={e=>{if(e.target===e.currentTarget)onClose()}}>
+      <div className="modal-box" style={{width}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:24}}>
+          <h2 style={{color:"#f8fafc",fontSize:20,fontWeight:800}}>{title}</h2>
+          <button onClick={onClose} style={{background:"none",border:"none",color:"#64748b",fontSize:22,cursor:"pointer",lineHeight:1}}>✕</button>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function FileBtn({label,accept,onFile,style}){
+  const ref=useRef();
+  return(
+    <>
+      <input type="file" accept={accept||"image/*"} style={{display:"none"}} ref={ref}
+        onChange={async e=>{const f=e.target.files[0];if(f)await onFile(f);e.target.value=""}}/>
+      <button className="btn-upload" style={style} onClick={()=>ref.current.click()}>{label}</button>
+    </>
+  );
+}
+
+function SaveToast({show}){
+  if(!show)return null;
+  return(
+    <div style={{position:"fixed",bottom:24,right:24,background:"#16a34a",color:"#fff",borderRadius:12,padding:"12px 22px",fontSize:14,fontWeight:700,zIndex:200,boxShadow:"0 4px 20px rgba(0,0,0,.4)"}}>
+      ✓ Changes saved & live on display
+    </div>
+  );
+}
+
+/* ═══════════════════ LOGIN MODAL ═══════════════════ */
+function LoginModal({onClose,onUserLogin,onAdminLogin}){
+  const [tab,setTab]=useState("user");
+  const [form,setForm]=useState({username:"",password:""});
+  const [err,setErr]=useState("");
+  const [loading,setLoading]=useState(false);
+
+  const attempt=()=>{
+    if(!form.username||!form.password){setErr("Please fill in all fields");return}
+    setLoading(true);setTimeout(()=>{
+      const role=tab==="user"?"owner":"admin";
+      const user=doLogin(form.username,form.password,role);
+      setLoading(false);
+      if(user){setErr("");tab==="user"?onUserLogin(user):onAdminLogin(user)}
+      else setErr("Invalid credentials or account inactive");
+    },400);
+  };
+
+  return(
+    <Modal onClose={onClose} title="Artemis Concierge">
+      {/* Option cards */}
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:24}}>
+        {["user","admin"].map(t=>(
+          <button key={t} onClick={()=>{setTab(t);setErr("")}} style={{
+            padding:"16px 12px",borderRadius:12,border:`2px solid ${tab===t?"var(--primary)":"#334155"}`,
+            background:tab===t?"rgba(245,183,49,.08)":"rgba(255,255,255,.02)",cursor:"pointer",
+            color:tab===t?"var(--primary)":"#64748b",fontWeight:700,fontSize:13,fontFamily:"inherit",
+            textAlign:"center",transition:"all .2s"
+          }}>
+            <div style={{fontSize:24,marginBottom:6}}>{t==="user"?"🏪":"🛡️"}</div>
+            {t==="user"?"Restaurant Owner":"Admin Login"}
+          </button>
+        ))}
+      </div>
+      <div style={{marginBottom:14}}>
+        <label className="f-label">{tab==="user"?"Owner":"Admin"} Username</label>
+        <input className="f-input" value={form.username} autoFocus
+          onChange={e=>setForm(f=>({...f,username:e.target.value}))}
+          onKeyDown={e=>e.key==="Enter"&&attempt()} placeholder={tab==="user"?"e.g. simplysouth":"admin"}/>
+      </div>
+      <div style={{marginBottom:err?10:20}}>
+        <label className="f-label">Password</label>
+        <input className="f-input" type="password" value={form.password}
+          onChange={e=>setForm(f=>({...f,password:e.target.value}))}
+          onKeyDown={e=>e.key==="Enter"&&attempt()} placeholder="Password"/>
+      </div>
+      {err&&<p style={{color:"#f87171",fontSize:13,marginBottom:14}}>{err}</p>}
+      <button className="btn btn-primary" onClick={attempt} style={{width:"100%",padding:"13px"}} disabled={loading}>
+        {loading?"Signing in…":"Sign In"}
+      </button>
+      {tab==="user"&&<p style={{color:"#475569",fontSize:12,textAlign:"center",marginTop:12}}>Demo: simplysouth / demo123</p>}
+      {tab==="admin"&&<p style={{color:"#475569",fontSize:12,textAlign:"center",marginTop:12}}>Demo: admin / admin123</p>}
+    </Modal>
+  );
+}
+
+/* ═══════════════════ TOAST CREDENTIALS MODAL ═══════════════════ */
+function ToastModal({creds,onSave,onClose,mode}){
+  const [form,setForm]=useState({...creds});
+  const isWebhook=mode==="webhook";
+  return(
+    <Modal onClose={onClose} title={isWebhook?"Toast Webhook Config":"Toast POS Login"} width={480}>
+      <div className="alert-warn" style={{marginBottom:20}}>
+        ⚡ {isWebhook?"Configure your webhook endpoint to receive real-time table updates from Toast.":"Enter your Toast API credentials to sync waitlist data. Keys are stored locally and never shared."}
+      </div>
+      {[
+        {key:"clientId",label:"Client ID",ph:"tc_xxxxxxxxxxxx"},
+        {key:"clientSecret",label:"Client Secret",ph:"••••••••••••••••",secret:true},
+        {key:"locationId",label:"Location ID",ph:"loc_xxxxxxxx"},
+        ...(isWebhook?[{key:"webhookSecret",label:"Webhook Secret",ph:"whsec_••••••••",secret:true}]:[])
+      ].map(f=>(
+        <div key={f.key} style={{marginBottom:14}}>
+          <label className="f-label">{f.label}</label>
+          <input className="f-input" type={f.secret?"password":"text"} value={form[f.key]||""}
+            onChange={e=>setForm(p=>({...p,[f.key]:e.target.value}))} placeholder={f.ph}/>
+        </div>
+      ))}
+      <div style={{display:"flex",gap:10,marginTop:8}}>
+        <button className="btn btn-primary" style={{flex:1}} onClick={()=>onSave(form)}>Save Credentials</button>
+        <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
+      </div>
+      <div style={{marginTop:18,background:"#0f172a",borderRadius:8,padding:14}}>
+        <p style={{color:"#475569",fontSize:11,fontWeight:700,letterSpacing:1,textTransform:"uppercase",marginBottom:8}}>Node.js Backend Endpoint</p>
+        <pre style={{color:"#a5f3fc",fontSize:11,lineHeight:1.7}}>{`GET /api/toast/waitlist\n→ Bearer auth → /waitlist/v1/locations/{id}/entries\n→ Map: { name, size, waitTime }\n→ Poll every 30s`}</pre>
+      </div>
+    </Modal>
+  );
+}
+
+/* ═══════════════════ OWNER DASHBOARD ═══════════════════ */
+function OwnerDashboard({user,onBack,onLogout}){
+  const [restaurant,setRestaurant]=useState(()=>DB.getRestaurant(user.restaurantId)||DEFAULT_RESTAURANTS[0]);
+  const [specials,setSpecials]=useState(()=>(DB.getRestaurant(user.restaurantId)||DEFAULT_RESTAURANTS[0]).specials||[...DEFAULT_SPECIALS.slice(0,3)]);
+  const [saved,setSaved]=useState(false);
+  const [toastModal,setToastModal]=useState(null); // null | 'login' | 'webhook'
+  const [themeTab,setThemeTab]=useState(false);
+
+  const persist=(updates)=>{
+    const updated=DB.updateRestaurant(restaurant.id,updates);
+    if(updated){setRestaurant(updated);showSaved()}
+  };
+
+  const showSaved=()=>{setSaved(true);setTimeout(()=>setSaved(false),2500)};
+
+  const updateLogo=async(file)=>{
+    const dataUrl=await resizeImage(file,400,180,0.9);
+    setRestaurant(r=>({...r,logoUrl:dataUrl}));
+    persist({logoUrl:dataUrl});
+  };
+
+  const updateSpecialImage=async(file,idx)=>{
+    const dataUrl=await resizeImage(file,900,700,0.82);
+    const newSp=[...specials];
+    if(!newSp[idx])newSp[idx]={id:`s${Date.now()}${idx}`,imageUrl:"",itemName:"",price:"",caption:""};
+    newSp[idx]={...newSp[idx],imageUrl:dataUrl};
+    setSpecials(newSp);persist({specials:newSp});
+  };
+
+  const updateSpecialField=(idx,field,val)=>{
+    const newSp=[...specials];
+    if(!newSp[idx])newSp[idx]={id:`s${Date.now()}${idx}`,imageUrl:"",itemName:"",price:"",caption:""};
+    newSp[idx]={...newSp[idx],[field]:val};
+    setSpecials(newSp);
+  };
+
+  const saveSpecials=()=>persist({specials});
+
+  const DashRow=({left,right})=>(
+    <div className="dash-row">
+      <div style={{display:"flex",alignItems:"center"}}>{left}</div>
+      <div style={{display:"flex",gap:10,alignItems:"center",flexWrap:"wrap"}}>{right}</div>
+    </div>
+  );
+
+  return(
+    <div style={{width:"100vw",height:"100vh",background:"#0f172a",display:"flex",flexDirection:"column",overflow:"hidden"}}>
+      {/* Header */}
+      <div style={{background:"#1e293b",borderBottom:"1px solid #334155",padding:"14px 28px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
+        <div style={{display:"flex",alignItems:"center",gap:14}}>
+          <button className="btn btn-ghost" style={{padding:"8px 16px",fontSize:13}} onClick={onBack}>← Live Display</button>
+          <div>
+            <p style={{color:"#f8fafc",fontSize:18,fontWeight:800}}>{restaurant.name} — Owner Dashboard</p>
+            <p style={{color:"#64748b",fontSize:12}}>Logged in as <strong style={{color:"var(--primary)"}}>{user.username}</strong></p>
+          </div>
+        </div>
+        <div style={{display:"flex",gap:10,alignItems:"center"}}>
+          {restaurant.logoUrl&&<img src={restaurant.logoUrl} alt="" style={{height:40,objectFit:"contain",borderRadius:6}} onError={e=>e.target.style.display="none"}/>}
+          <button className="btn btn-ghost" style={{padding:"8px 14px",fontSize:13}} onClick={onLogout}>Sign Out</button>
+        </div>
+      </div>
+
+      {/* Theme bar */}
+      <div style={{background:"rgba(245,183,49,.06)",borderBottom:"1px solid rgba(245,183,49,.15)",padding:"10px 28px",display:"flex",alignItems:"center",gap:16}}>
+        <span style={{color:"#f5b731",fontSize:12,fontWeight:700,letterSpacing:1}}>THEME</span>
+        <div style={{display:"flex",alignItems:"center",gap:8}}>
+          <input type="color" value={restaurant.primaryColor} style={{width:32,height:28,borderRadius:6,border:"none",cursor:"pointer"}}
+            onChange={e=>{setRestaurant(r=>({...r,primaryColor:e.target.value}));applyTheme(e.target.value,restaurant.bgColor)}}
+            onBlur={e=>persist({primaryColor:e.target.value})}/>
+          <span style={{color:"#94a3b8",fontSize:12}}>Accent</span>
+        </div>
+        <div style={{display:"flex",alignItems:"center",gap:8}}>
+          <input type="color" value={restaurant.bgColor} style={{width:32,height:28,borderRadius:6,border:"none",cursor:"pointer"}}
+            onChange={e=>{setRestaurant(r=>({...r,bgColor:e.target.value}));applyTheme(restaurant.primaryColor,e.target.value)}}
+            onBlur={e=>persist({bgColor:e.target.value})}/>
+          <span style={{color:"#94a3b8",fontSize:12}}>Background</span>
+        </div>
+        <button className="btn-upload" style={{fontSize:12,padding:"5px 12px"}} onClick={async()=>{
+          if(!restaurant.logoUrl)return;
+          const img=new Image();img.crossOrigin="anonymous";
+          img.onload=()=>{
+            const cv=document.createElement("canvas");cv.width=60;cv.height=60;
+            const ctx=cv.getContext("2d");ctx.drawImage(img,0,0,60,60);
+            const d=ctx.getImageData(0,0,60,60).data;
+            let r=0,g=0,b=0,n=0;
+            for(let i=0;i<d.length;i+=8){r+=d[i];g+=d[i+1];b+=d[i+2];n++}
+            r=Math.round(r/n);g=Math.round(g/n);b=Math.round(b/n);
+            const h=c=>c.toString(16).padStart(2,"0");
+            const primary=`#${h(r)}${h(g)}${h(b)}`;
+            const bgR=Math.round(r*.1),bgG=Math.round(g*.1),bgB=Math.round(b*.1);
+            const bg=`#${h(bgR)}${h(bgG)}${h(bgB)}`;
+            setRestaurant(rv=>({...rv,primaryColor:primary,bgColor:bg}));
+            applyTheme(primary,bg);persist({primaryColor:primary,bgColor:bg});
+          };img.onerror=()=>alert("Cannot extract — try a direct image URL");
+          img.src=restaurant.logoUrl;
+        }}>✦ Auto-Extract from Logo</button>
+        <div style={{marginLeft:"auto",display:"flex",gap:8,alignItems:"center"}}>
+          <span style={{color:"#475569",fontSize:12}}>Layout — Specials width</span>
+          <input type="range" min="30" max="70" value={restaurant.layout?.specialsWidth||50}
+            style={{width:80,accentColor:"var(--primary)"}}
+            onChange={e=>{const v=parseInt(e.target.value);setRestaurant(r=>({...r,layout:{...r.layout,specialsWidth:v}}))}}
+            onMouseUp={e=>persist({layout:{...restaurant.layout,specialsWidth:parseInt(e.target.value)}})}/>
+          <span style={{color:"var(--primary)",fontSize:12,fontWeight:700,minWidth:28}}>{restaurant.layout?.specialsWidth||50}%</span>
+        </div>
+      </div>
+
+      {/* Main grid */}
+      <div style={{flex:1,overflowY:"auto",padding:"28px 32px",maxWidth:960}} className="no-sb">
+        <h2 style={{color:"#f8fafc",fontSize:17,fontWeight:800,marginBottom:20}}>Daily Content Manager</h2>
+
+        {/* === ROW 1: LOGO === */}
+        <DashRow
+          left={
+            <div>
+              <p className="dash-label">📷 Upload Logo</p>
+              {restaurant.logoUrl&&<img src={restaurant.logoUrl} alt="" style={{height:36,objectFit:"contain",marginTop:8,borderRadius:6}} onError={e=>e.target.style.display="none"}/>}
+            </div>
+          }
+          right={
+            <FileBtn label="Upload Logo" accept="image/*" onFile={updateLogo}/>
+          }
+        />
+
+        {/* === ROWS 2-4: SPECIALS === */}
+        {[0,1,2].map(i=>(
+          <DashRow key={i}
+            left={
+              <div style={{width:"100%"}}>
+                <p className="dash-label" style={{marginBottom:8}}>🍽️ Special {i+1}</p>
+                {specials[i]?.imageUrl&&(
+                  <img src={specials[i].imageUrl} alt="" style={{height:52,width:80,objectFit:"cover",borderRadius:6,marginBottom:6}} onError={e=>e.target.style.display="none"}/>
+                )}
+                <input className="f-input" placeholder="Item name (e.g. Masala Dosa)"
+                  value={specials[i]?.itemName||""} style={{fontSize:13,padding:"8px 12px",marginBottom:6}}
+                  onChange={e=>updateSpecialField(i,"itemName",e.target.value)} onBlur={saveSpecials}/>
+                <input className="f-input" placeholder="Price (e.g. $13)"
+                  value={specials[i]?.price||""} style={{fontSize:13,padding:"8px 12px",width:120}}
+                  onChange={e=>updateSpecialField(i,"price",e.target.value)} onBlur={saveSpecials}/>
+              </div>
+            }
+            right={
+              <div style={{display:"flex",flexDirection:"column",gap:8,width:"100%"}}>
+                <FileBtn label="Upload Photo" accept="image/*" onFile={f=>updateSpecialImage(f,i)}/>
+                <textarea className="f-input" placeholder="Product description…"
+                  value={specials[i]?.caption||""} rows={3} style={{resize:"none",fontSize:13,padding:"8px 12px"}}
+                  onChange={e=>updateSpecialField(i,"caption",e.target.value)} onBlur={saveSpecials}/>
+              </div>
+            }
+          />
+        ))}
+
+        {/* === ROW 5: TOAST === */}
+        <DashRow
+          left={
+            <div>
+              <p className="dash-label" style={{marginBottom:10}}>🍞 Toast POS</p>
+              <div style={{display:"flex",alignItems:"center",gap:8}}>
+                <div style={{width:8,height:8,borderRadius:"50%",background:restaurant.toastCreds?.clientId?"#4ade80":"#475569"}}/>
+                <span style={{color:"#64748b",fontSize:12}}>{restaurant.toastCreds?.clientId?"Connected":"Not connected — mock mode"}</span>
+              </div>
+            </div>
+          }
+          right={
+            <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
+              <button className="btn btn-ghost" style={{fontSize:13,padding:"8px 16px"}} onClick={()=>setToastModal("login")}>
+                🔑 Toast Login
+              </button>
+              <button className="btn btn-ghost" style={{fontSize:13,padding:"8px 16px"}} onClick={()=>setToastModal("webhook")}>
+                🔗 Toast Webhook
+              </button>
+            </div>
+          }
+        />
+
+        {/* Display URL */}
+        <div className="f-card" style={{marginTop:24}}>
+          <p className="f-label" style={{marginBottom:10}}>📺 TV / Cast Display URL</p>
+          <div style={{display:"flex",gap:10,alignItems:"center"}}>
+            <code style={{flex:1,background:"#0f172a",borderRadius:6,padding:"10px 14px",color:"var(--primary)",fontSize:13,fontFamily:"monospace"}}>
+              {window.location.href.split("?")[0]}?r={restaurant.id}
+            </code>
+            <button className="btn btn-primary" style={{padding:"10px 18px",fontSize:13}}
+              onClick={()=>{navigator.clipboard?.writeText(`${window.location.href.split("?")[0]}?r=${restaurant.id}`);showSaved()}}>
+              Copy
+            </button>
+          </div>
+          <p style={{color:"#475569",fontSize:12,marginTop:8}}>Open this URL in a fullscreen browser on your lobby TV. Bookmark it for daily use.</p>
+        </div>
+      </div>
+
+      {toastModal&&(
+        <ToastModal creds={restaurant.toastCreds} mode={toastModal} onClose={()=>setToastModal(null)}
+          onSave={creds=>{persist({toastCreds:creds});setToastModal(null)}}/>
+      )}
+      <SaveToast show={saved}/>
+    </div>
+  );
+}
+
+/* ═══════════════════ ADMIN CONSOLE ═══════════════════ */
+function AdminConsole({user,onBack,onLogout}){
+  const [tab,setTab]=useState("users");
+  const [users,setUsers]=useState(()=>DB.getUsers());
+  const [restaurants,setRestaurants]=useState(()=>DB.getRestaurants());
+  const [newUser,setNewUser]=useState({username:"",password:"",restaurantName:"",role:"owner"});
+  const [gitForm,setGitForm]=useState({repo:"",token:"",branch:"main"});
+  const [saved,setSaved]=useState(false);
+  const [gitMsg,setGitMsg]=useState("");
+  const [selRestaurant,setSelRestaurant]=useState(null);
+
+  const showSaved=()=>{setSaved(true);setTimeout(()=>setSaved(false),2500)};
+
+  const createUser=()=>{
+    if(!newUser.username||!newUser.password)return;
+    const uid=`u${Date.now()}`;
+    const rid=`r${Date.now()}`;
+    const newRest={id:rid,ownerId:uid,name:newUser.restaurantName||`${newUser.username}'s Restaurant`,...DEFAULT_RESTAURANT_TEMPLATE,specials:[...DEFAULT_SPECIALS.slice(0,3)]};
+    const newU={id:uid,username:newUser.username,password:newUser.password,role:newUser.role,restaurantId:rid,active:true,createdAt:new Date().toISOString()};
+    const updU=[...users,newU];const updR=[...restaurants,newRest];
+    DB.saveUsers(updU);DB.saveRestaurants(updR);
+    setUsers(updU);setRestaurants(updR);
+    setNewUser({username:"",password:"",restaurantName:"",role:"owner"});
+    showSaved();
+  };
+
+  const toggleUser=(id)=>{
+    const updated=users.map(u=>u.id===id?{...u,active:!u.active}:u);
+    DB.saveUsers(updated);setUsers(updated);showSaved();
+  };
+
+  const pushToGit=async()=>{
+    if(!gitForm.repo||!gitForm.token){setGitMsg("⚠️ Repo and token required");return}
+    setGitMsg("⏳ Pushing to GitHub…");
+    try{
+      const content=btoa(unescape(encodeURIComponent(document.documentElement.outerHTML)));
+      const check=await fetch(`https://api.github.com/repos/${gitForm.repo}/contents/artemis-concierge.html`,{headers:{"Authorization":`token ${gitForm.token}`}});
+      const sha=check.ok?(await check.json()).sha:undefined;
+      const res=await fetch(`https://api.github.com/repos/${gitForm.repo}/contents/artemis-concierge.html`,{
+        method:"PUT",headers:{"Authorization":`token ${gitForm.token}`,"Content-Type":"application/json"},
+        body:JSON.stringify({message:"Update Artemis Concierge via admin console",content,branch:gitForm.branch,...(sha?{sha}:{})})
+      });
+      setGitMsg(res.ok?"✅ Pushed successfully to "+gitForm.repo:"❌ Push failed: "+res.status);
+    }catch(e){setGitMsg("❌ Error: "+e.message)}
+  };
+
+  const updateRestaurantAdmin=(id,field,val)=>{
+    const updated=restaurants.map(r=>r.id===id?{...r,[field]:val}:r);
+    DB.saveRestaurants(updated);setRestaurants(updated);showSaved();
+  };
+
+  return(
+    <div style={{width:"100vw",height:"100vh",background:"#0f172a",display:"flex",flexDirection:"column",overflow:"hidden"}}>
+      <div style={{background:"#1e293b",borderBottom:"1px solid #334155",padding:"14px 28px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
+        <div style={{display:"flex",alignItems:"center",gap:14}}>
+          <button className="btn btn-ghost" style={{padding:"8px 16px",fontSize:13}} onClick={onBack}>← Live Display</button>
+          <div>
+            <p style={{color:"#f8fafc",fontSize:18,fontWeight:800}}>Artemis Concierge — Admin Console</p>
+            <p style={{color:"#64748b",fontSize:12}}>Logged in as <strong style={{color:"#f87171"}}>{user.username}</strong> · Super Admin</p>
+          </div>
+        </div>
+        <button className="btn btn-ghost" style={{padding:"8px 14px",fontSize:13}} onClick={onLogout}>Sign Out</button>
+      </div>
+
+      <div className="tab-strip" style={{padding:"0 28px",background:"#1e293b",flexShrink:0}}>
+        {["users","restaurants","system"].map(t=>(
+          <button key={t} className={`tab-btn${tab===t?" active":""}`} onClick={()=>setTab(t)}>
+            {t==="users"?"👥 Users":t==="restaurants"?"🏪 Restaurants":"⚙️ System"}
+          </button>
+        ))}
+      </div>
+
+      <div style={{flex:1,overflowY:"auto",padding:"28px 32px"}} className="no-sb">
+
+        {/* ── USERS TAB ── */}
+        {tab==="users"&&(
+          <div style={{display:"flex",flexDirection:"column",gap:24}}>
+            <h2 style={{color:"#f8fafc",fontSize:18,fontWeight:800}}>User Management</h2>
+
+            {/* Create user */}
+            <div className="f-card">
+              <p className="f-label" style={{marginBottom:14}}>Create New Restaurant Owner Account</p>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12}}>
+                <div>
+                  <label className="f-label">Username</label>
+                  <input className="f-input" value={newUser.username} placeholder="e.g. spicecafe"
+                    onChange={e=>setNewUser(u=>({...u,username:e.target.value}))}/>
+                </div>
+                <div>
+                  <label className="f-label">Password</label>
+                  <input className="f-input" type="password" value={newUser.password} placeholder="Temp password"
+                    onChange={e=>setNewUser(u=>({...u,password:e.target.value}))}/>
+                </div>
+                <div>
+                  <label className="f-label">Restaurant Name</label>
+                  <input className="f-input" value={newUser.restaurantName} placeholder="e.g. Spice Café"
+                    onChange={e=>setNewUser(u=>({...u,restaurantName:e.target.value}))}/>
+                </div>
+              </div>
+              <button className="btn btn-primary" style={{marginTop:14}} onClick={createUser}>
+                + Create Account &amp; Restaurant
+              </button>
+            </div>
+
+            {/* Users table */}
+            <div style={{background:"#1e293b",borderRadius:12,border:"1px solid #334155",overflow:"hidden"}}>
+              <table className="data-table">
+                <thead>
+                  <tr><th>Username</th><th>Role</th><th>Restaurant</th><th>Status</th><th>Created</th><th>Actions</th></tr>
+                </thead>
+                <tbody>
+                  {users.map(u=>{
+                    const rest=restaurants.find(r=>r.id===u.restaurantId);
+                    return(
+                      <tr key={u.id}>
+                        <td style={{fontWeight:600}}>{u.username}</td>
+                        <td><span className={`badge ${u.role==="admin"?"badge-red":"badge-amber"}`}>{u.role}</span></td>
+                        <td style={{color:"#94a3b8"}}>{rest?.name||"—"}</td>
+                        <td><span className={`badge ${u.active!==false?"badge-green":"badge-red"}`}>{u.active!==false?"Active":"Disabled"}</span></td>
+                        <td style={{color:"#475569",fontSize:12}}>{u.createdAt?.slice(0,10)||"—"}</td>
+                        <td>
+                          {u.id!=="admin"&&(
+                            <button className={`btn ${u.active!==false?"btn-danger":"btn-success"}`}
+                              style={{padding:"4px 12px",fontSize:12}} onClick={()=>toggleUser(u.id)}>
+                              {u.active!==false?"Disable":"Enable"}
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* ── RESTAURANTS TAB ── */}
+        {tab==="restaurants"&&(
+          <div style={{display:"flex",flexDirection:"column",gap:20}}>
+            <h2 style={{color:"#f8fafc",fontSize:18,fontWeight:800}}>Restaurant Management</h2>
+            {restaurants.map(r=>(
+              <div key={r.id} className="f-card" style={{border:`1px solid ${selRestaurant===r.id?"var(--primary)":"#334155"}`}}>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:selRestaurant===r.id?16:0}}>
+                  <div style={{display:"flex",alignItems:"center",gap:14}}>
+                    {r.logoUrl&&<img src={r.logoUrl} alt="" style={{height:36,objectFit:"contain",borderRadius:6}} onError={e=>e.target.style.display="none"}/>}
+                    <div>
+                      <p style={{color:"#f8fafc",fontWeight:700,fontSize:15}}>{r.name}</p>
+                      <p style={{color:"#64748b",fontSize:12}}>{r.tagline} · ID: {r.id}</p>
+                    </div>
+                  </div>
+                  <div style={{display:"flex",gap:10,alignItems:"center"}}>
+                    <div style={{width:10,height:10,borderRadius:"50%",background:r.active!==false?"#4ade80":"#f87171"}}/>
+                    <span className={`badge ${r.active!==false?"badge-green":"badge-red"}`}>{r.active!==false?"Live":"Disabled"}</span>
+                    <button className="btn btn-ghost" style={{fontSize:13,padding:"6px 14px"}}
+                      onClick={()=>setSelRestaurant(selRestaurant===r.id?null:r.id)}>
+                      {selRestaurant===r.id?"Collapse":"Edit"}
+                    </button>
+                    <button className={`btn ${r.active!==false?"btn-danger":"btn-success"}`} style={{fontSize:12,padding:"6px 12px"}}
+                      onClick={()=>{updateRestaurantAdmin(r.id,"active",!(r.active!==false));setRestaurants(DB.getRestaurants())}}>
+                      {r.active!==false?"Disable":"Enable"}
+                    </button>
+                  </div>
+                </div>
+                {selRestaurant===r.id&&(
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:14,marginTop:4}}>
+                    <div>
+                      <label className="f-label">Restaurant Name</label>
+                      <input className="f-input" defaultValue={r.name} style={{fontSize:13}}
+                        onBlur={e=>updateRestaurantAdmin(r.id,"name",e.target.value)}/>
+                    </div>
+                    <div>
+                      <label className="f-label">Tagline</label>
+                      <input className="f-input" defaultValue={r.tagline} style={{fontSize:13}}
+                        onBlur={e=>updateRestaurantAdmin(r.id,"tagline",e.target.value)}/>
+                    </div>
+                    <div>
+                      <label className="f-label">Display URL</label>
+                      <code style={{display:"block",background:"#0f172a",borderRadius:6,padding:"10px",color:"var(--primary)",fontSize:11}}>{window.location.href.split("?")[0]}?r={r.id}</code>
+                    </div>
+                    <div style={{display:"flex",gap:12,alignItems:"center"}}>
+                      <div>
+                        <label className="f-label">Accent Color</label>
+                        <input type="color" value={r.primaryColor||"#f5b731"}
+                          style={{width:48,height:36,borderRadius:6,border:"none",cursor:"pointer"}}
+                          onChange={e=>updateRestaurantAdmin(r.id,"primaryColor",e.target.value)}/>
+                      </div>
+                      <div>
+                        <label className="f-label">BG Color</label>
+                        <input type="color" value={r.bgColor||"#0c1a0d"}
+                          style={{width:48,height:36,borderRadius:6,border:"none",cursor:"pointer"}}
+                          onChange={e=>updateRestaurantAdmin(r.id,"bgColor",e.target.value)}/>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* ── SYSTEM TAB ── */}
+        {tab==="system"&&(
+          <div style={{display:"flex",flexDirection:"column",gap:24}}>
+            <h2 style={{color:"#f8fafc",fontSize:18,fontWeight:800}}>System Settings</h2>
+
+            {/* Git push */}
+            <div className="f-card">
+              <p className="f-label" style={{marginBottom:14}}>Push to GitHub Repository</p>
+              <div style={{display:"grid",gridTemplateColumns:"2fr 1fr",gap:12,marginBottom:12}}>
+                <div>
+                  <label className="f-label">Repository (owner/repo)</label>
+                  <input className="f-input" value={gitForm.repo} placeholder="yourusername/artemis-concierge"
+                    onChange={e=>setGitForm(g=>({...g,repo:e.target.value}))}/>
+                </div>
+                <div>
+                  <label className="f-label">Branch</label>
+                  <input className="f-input" value={gitForm.branch} onChange={e=>setGitForm(g=>({...g,branch:e.target.value}))}/>
+                </div>
+              </div>
+              <div style={{marginBottom:14}}>
+                <label className="f-label">GitHub Personal Access Token</label>
+                <input className="f-input" type="password" value={gitForm.token} placeholder="ghp_••••••••••••••••"
+                  onChange={e=>setGitForm(g=>({...g,token:e.target.value}))}/>
+              </div>
+              <div style={{display:"flex",gap:10,alignItems:"center"}}>
+                <button className="btn btn-primary" onClick={pushToGit}>⬆ Push Current App to GitHub</button>
+                {gitMsg&&<span style={{color:gitMsg.startsWith("✅")?"#4ade80":gitMsg.startsWith("⏳")?"#f5b731":"#f87171",fontSize:13}}>{gitMsg}</span>}
+              </div>
+              <p style={{color:"#475569",fontSize:12,marginTop:10}}>Pushes the entire Artemis Concierge HTML to your GitHub repo. Requires a Personal Access Token with repo write permission.</p>
+            </div>
+
+            {/* Stats */}
+            <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:14}}>
+              {[
+                {label:"Total Restaurants",value:restaurants.length,color:"#f5b731"},
+                {label:"Active Owners",value:users.filter(u=>u.role==="owner"&&u.active!==false).length,color:"#4ade80"},
+                {label:"Disabled Accounts",value:users.filter(u=>u.active===false).length,color:"#f87171"},
+                {label:"System Version",value:"v2.0",color:"#a78bfa"},
+              ].map(s=>(
+                <div key={s.label} className="f-card" style={{textAlign:"center"}}>
+                  <p style={{color:s.color,fontSize:32,fontWeight:900}}>{s.value}</p>
+                  <p style={{color:"#64748b",fontSize:12,marginTop:4}}>{s.label}</p>
+                </div>
+              ))}
+            </div>
+
+            {/* Reset */}
+            <div className="f-card">
+              <p className="f-label" style={{marginBottom:10}}>Danger Zone</p>
+              <button className="btn btn-danger" style={{fontSize:13}} onClick={()=>{
+                if(confirm("Reset ALL data to factory defaults? This cannot be undone.")){
+                  localStorage.removeItem("artemis_users");localStorage.removeItem("artemis_restaurants");
+                  location.reload();
+                }
+              }}>⚠ Reset All Data to Factory Defaults</button>
+            </div>
+          </div>
+        )}
+      </div>
+      <SaveToast show={saved}/>
+    </div>
+  );
+}
+
+/* ═══════════════════ LOBBY DISPLAY ═══════════════════ */
+function SpecialsCarousel({specials}){
+  const [idx,setIdx]=useState(0);
+  const [vis,setVis]=useState(true);
+  const validSpecials=specials.filter(s=>s.imageUrl||s.itemName);
+  if(!validSpecials.length)return(
+    <section style={{border:"3px solid var(--primary)",borderRadius:18,display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(255,255,255,.02)"}}>
+      <div style={{textAlign:"center",color:"rgba(255,255,255,.3)"}}>
+        <div style={{fontSize:48,marginBottom:12}}>🍽️</div>
+        <p style={{fontSize:"clamp(14px,2vw,20px)"}}>Today's Specials Coming Soon</p>
+      </div>
+    </section>
+  );
+  useEffect(()=>{if(validSpecials.length<2)return;const t=setInterval(()=>{setVis(false);setTimeout(()=>{setIdx(p=>(p+1)%validSpecials.length);setVis(true)},700)},10000);return()=>clearInterval(t)},[validSpecials.length]);
+  const sp=validSpecials[idx%validSpecials.length];
+  return(
+    <section style={{border:"3px solid var(--primary)",borderRadius:18,overflow:"hidden",position:"relative",background:"#000"}}>
+      <div style={{position:"absolute",inset:0,opacity:vis?1:0,transition:"opacity .7s ease"}}>
+        {sp.imageUrl&&<img src={sp.imageUrl} alt={sp.itemName} style={{width:"100%",height:"100%",objectFit:"cover"}} onError={e=>e.target.style.display="none"}/>}
+      </div>
+      <div style={{position:"absolute",inset:0,background:"linear-gradient(to top,rgba(0,0,0,.9) 0%,rgba(0,0,0,.1) 55%,transparent 100%)",display:"flex",flexDirection:"column",justifyContent:"flex-end",padding:"clamp(16px,3vh,36px)",opacity:vis?1:0,transition:"opacity .7s ease"}}>
+        <p style={{color:"var(--primary)",fontSize:"clamp(11px,1.4vw,18px)",fontWeight:700,letterSpacing:3,textTransform:"uppercase",marginBottom:6}}>Today's Special</p>
+        <p style={{color:"#fff",fontSize:"clamp(26px,4.5vw,64px)",fontWeight:900,lineHeight:1.05,marginBottom:6}}>{sp.itemName}</p>
+        <p style={{color:"#cbd5e1",fontSize:"clamp(13px,1.8vw,24px)",marginBottom:10,lineHeight:1.4}}>{sp.caption}</p>
+        {sp.price&&<p style={{color:"var(--primary)",fontSize:"clamp(22px,3.5vw,50px)",fontWeight:800}}>{sp.price}</p>}
+      </div>
+      <div style={{position:"absolute",bottom:18,right:20,display:"flex",gap:8,zIndex:10}}>
+        {validSpecials.map((_,i)=>(
+          <div key={i} onClick={()=>{setVis(false);setTimeout(()=>{setIdx(i);setVis(true)},300)}}
+            style={{width:i===idx?24:8,height:8,borderRadius:9999,background:i===idx?"var(--primary)":"rgba(255,255,255,.4)",cursor:"pointer",transition:"all .3s"}}/>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function WaitlistPanel({data}){
+  const [now,setNow]=useState(new Date());
+  useEffect(()=>{const t=setInterval(()=>setNow(new Date()),1000);return()=>clearInterval(t)},[]);
+  const guests=data?.nextInLine??[];
+  return(
+    <section style={{border:"3px solid var(--primary)",borderRadius:18,padding:"clamp(14px,2.5vh,32px)",background:"var(--card)",display:"flex",flexDirection:"column",gap:"clamp(10px,1.8vh,22px)",overflow:"hidden"}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-end",borderBottom:"1px solid rgba(255,255,255,.1)",paddingBottom:"clamp(10px,1.5vh,18px)"}}>
+        <div><p style={{color:"rgba(255,255,255,.45)",fontSize:"clamp(10px,1.1vw,15px)",letterSpacing:1,textTransform:"uppercase"}}>Guests Waiting</p><p style={{color:"#fff",fontSize:"clamp(32px,5.5vw,72px)",fontWeight:900,lineHeight:1}}>{data?.totalWaiting??0}</p></div>
+        <div style={{textAlign:"right"}}><p style={{color:"rgba(255,255,255,.45)",fontSize:"clamp(10px,1.1vw,15px)",textTransform:"uppercase",letterSpacing:1}}>Est. Wait</p><p style={{color:"#fff",fontSize:"clamp(32px,5.5vw,72px)",fontWeight:900,lineHeight:1}}>{data?.avgWait??0}<span style={{fontSize:".4em",color:"rgba(255,255,255,.5)"}}>m</span></p></div>
+        <div style={{textAlign:"right"}}><p style={{color:"rgba(255,255,255,.4)",fontSize:"clamp(10px,1.2vw,16px)",textTransform:"uppercase",letterSpacing:1}}>{now.toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric"})}</p><p style={{color:"var(--primary)",fontSize:"clamp(18px,2.5vw,34px)",fontWeight:700}}>{now.toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit"})}</p></div>
+      </div>
+      <p style={{color:"rgba(255,255,255,.4)",fontSize:"clamp(10px,1.2vw,15px)",fontWeight:700,letterSpacing:3,textTransform:"uppercase"}}>Next in Line</p>
+      <div style={{flex:1,overflowY:"auto",display:"flex",flexDirection:"column",gap:"clamp(7px,1.2vh,14px)"}} className="no-sb">
+        {guests.map((g,i)=>(
+          <div key={g.id} className={i===0?"pulse-card fade-up":"fade-up"}
+            style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:i===0?"clamp(12px,2vh,20px) clamp(14px,2vw,24px)":"clamp(8px,1.3vh,14px) clamp(14px,2vw,24px)",borderRadius:12,border:i===0?"3px solid var(--primary)":"1px solid rgba(255,255,255,.08)",background:i===0?"color-mix(in srgb,var(--primary) 14%,transparent)":"rgba(255,255,255,.02)",animationDelay:`${i*60}ms`}}>
+            <div style={{display:"flex",alignItems:"center",gap:"clamp(10px,1.5vw,20px)"}}>
+              <div style={{width:i===0?"clamp(36px,4.5vw,56px)":"clamp(28px,3.5vw,44px)",height:i===0?"clamp(36px,4.5vw,56px)":"clamp(28px,3.5vw,44px)",borderRadius:"50%",background:i===0?"var(--primary)":"rgba(255,255,255,.1)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:i===0?"clamp(14px,2vw,24px)":"clamp(11px,1.5vw,18px)",fontWeight:800,color:i===0?"#1a1a1a":"#fff",flexShrink:0}}>{i+1}</div>
+              <div>
+                <p style={{color:"#fff",fontSize:i===0?"clamp(22px,3.8vw,54px)":"clamp(15px,2.5vw,34px)",fontWeight:i===0?900:600,lineHeight:1.1}}>{g.name}</p>
+                {i===0&&<p style={{color:"var(--primary)",fontSize:"clamp(10px,1.2vw,15px)",fontWeight:700,letterSpacing:2,textTransform:"uppercase"}}>✦ NEXT UP</p>}
+              </div>
+            </div>
+            <div style={{textAlign:"right"}}>
+              <p style={{color:i===0?"#fff":"rgba(255,255,255,.55)",fontSize:i===0?"clamp(18px,2.8vw,40px)":"clamp(13px,2vw,28px)",fontWeight:700}}>👥 {g.size}</p>
+              <p style={{color:"rgba(255,255,255,.35)",fontSize:"clamp(9px,1vw,14px)"}}>~{g.waitTime}m</p>
+            </div>
+          </div>
+        ))}
+        {!guests.length&&<p style={{color:"rgba(255,255,255,.3)",fontSize:"clamp(14px,2vw,20px)",textAlign:"center",marginTop:32}}>No guests currently waiting</p>}
+      </div>
+      <p style={{color:"rgba(255,255,255,.2)",fontSize:"clamp(9px,1vw,13px)",textAlign:"center",letterSpacing:1}}>Auto-updates every 30s · Artemis Concierge</p>
+    </section>
+  );
+}
+
+function LobbyDisplay({restaurantId,onOpenLogin}){
+  const [restaurant,setRestaurant]=useState(()=>{
+    const r=DB.getRestaurant(restaurantId);
+    return r||DEFAULT_RESTAURANTS[0];
+  });
+  const [data,setData]=useState(null);
+
+  useEffect(()=>{
+    const r=DB.getRestaurant(restaurantId)||DEFAULT_RESTAURANTS[0];
+    setRestaurant(r);
+    applyTheme(r.primaryColor||"#f5b731",r.bgColor||"#0c1a0d");
+  },[restaurantId]);
+
+  const refresh=useCallback(()=>{
+    const wl=generateWaitlist();
+    setData({totalWaiting:wl.length,avgWait:wl[0]?.waitTime??0,nextInLine:wl.slice(0,6)});
+    // Re-read restaurant data in case owner updated it
+    const r=DB.getRestaurant(restaurantId);
+    if(r){setRestaurant(r);applyTheme(r.primaryColor,r.bgColor)}
+  },[restaurantId]);
+
+  useEffect(()=>{refresh();const t=setInterval(refresh,30000);return()=>clearInterval(t)},[refresh]);
+
+  const sw=restaurant.layout?.specialsWidth||50;
+
+  return(
+    <div style={{width:"100vw",height:"100vh",background:"var(--bg)",display:"grid",gridTemplateRows:`${restaurant.layout?.headerHeight||18}vh 1fr`,gap:"clamp(8px,1.5vh,16px)",padding:"clamp(8px,1.5vh,16px)",overflow:"hidden",cursor:"none"}}>
+      <header style={{border:"3px solid var(--primary)",borderRadius:18,display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0 clamp(20px,4vw,56px)",background:"rgba(255,255,255,.02)",overflow:"hidden"}}>
+        <div style={{overflow:"hidden"}}>
+          <p style={{color:"var(--primary)",fontSize:"clamp(10px,1vw,14px)",textTransform:"uppercase",letterSpacing:4,fontWeight:700}}>Welcome to</p>
+          <p className="display-name" style={{color:"#fff",fontSize:"clamp(26px,4.5vw,62px)",fontWeight:700,whiteSpace:"nowrap",lineHeight:1.05,fontStyle:"italic"}}>{restaurant.name}</p>
+          <p style={{color:"rgba(255,255,255,.5)",fontSize:"clamp(9px,1.1vw,15px)",letterSpacing:3,fontWeight:600,textTransform:"uppercase"}}>{restaurant.tagline||"Pure Indian Vegetarian"}</p>
+        </div>
+        <div style={{display:"flex",alignItems:"center",gap:16}}>
+          {restaurant.logoUrl&&<img src={restaurant.logoUrl} alt={restaurant.name} style={{height:"clamp(36px,8vh,76px)",objectFit:"contain",borderRadius:8}} onError={e=>e.target.style.display="none"}/>}
+          <button onClick={onOpenLogin} title="Admin / Owner Login"
+            style={{background:"rgba(255,255,255,.05)",border:"1px solid rgba(255,255,255,.1)",color:"rgba(255,255,255,.2)",borderRadius:8,padding:"6px 10px",cursor:"pointer",fontSize:16}}>⚙</button>
+        </div>
+      </header>
+      <div style={{display:"grid",gridTemplateColumns:`${sw}% 1fr`,gap:"clamp(8px,1.5vw,16px)",minHeight:0}}>
+        <SpecialsCarousel specials={restaurant.specials?.filter(s=>s?.imageUrl||s?.itemName)||DEFAULT_SPECIALS}/>
+        <WaitlistPanel data={data}/>
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════ ROOT APP ═══════════════════ */
+function App(){
+  const urlR=new URLSearchParams(window.location.search).get("r")||"r1";
+  const [view,setView]=useState("lobby");
+  const [showLogin,setShowLogin]=useState(false);
+  const [currentUser,setCurrentUser]=useState(null);
+  const [restaurantId,setRestaurantId]=useState(urlR);
+
+  useEffect(()=>{
+    const r=DB.getRestaurant(restaurantId)||DEFAULT_RESTAURANTS[0];
+    applyTheme(r.primaryColor||"#f5b731",r.bgColor||"#0c1a0d");
+    document.title=`${r.name} — Artemis Concierge`;
+  },[restaurantId]);
+
+  const logout=()=>{setCurrentUser(null);setView("lobby");setShowLogin(false)};
+
+  if(view==="owner")return<OwnerDashboard user={currentUser} onBack={()=>setView("lobby")} onLogout={logout}/>;
+  if(view==="admin")return<AdminConsole user={currentUser} onBack={()=>setView("lobby")} onLogout={logout}/>;
+
+  return(
+    <>
+      <LobbyDisplay restaurantId={restaurantId} onOpenLogin={()=>setShowLogin(true)}/>
+      {showLogin&&(
+        <LoginModal
+          onClose={()=>setShowLogin(false)}
+          onUserLogin={u=>{setCurrentUser(u);setRestaurantId(u.restaurantId||restaurantId);setShowLogin(false);setView("owner")}}
+          onAdminLogin={u=>{setCurrentUser(u);setShowLogin(false);setView("admin")}}
+        />
+      )}
+    </>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>
