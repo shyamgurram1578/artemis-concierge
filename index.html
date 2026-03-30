@@ -831,12 +831,31 @@ function LobbyDisplay({restaurantId,onOpenLogin}){
     applyTheme(r.primaryColor||"#f5b731",r.bgColor||"#0c1a0d");
   },[restaurantId]);
 
-  const refresh=useCallback(()=>{
-    const wl=generateWaitlist();
-    setData({totalWaiting:wl.length,avgWait:wl[0]?.waitTime??0,nextInLine:wl.slice(0,6)});
+  const refresh=useCallback(async()=>{
     // Re-read restaurant data in case owner updated it
     const r=DB.getRestaurant(restaurantId);
     if(r){setRestaurant(r);applyTheme(r.primaryColor,r.bgColor)}
+
+    const creds=(r||restaurant).toastCreds||{};
+    const {clientId,clientSecret,locationId}=creds;
+
+    // Use live Toast API if credentials are present, otherwise fall back to mock
+    if(clientId&&clientSecret&&locationId){
+      try{
+        const params=new URLSearchParams({clientId,clientSecret,locationId});
+        const res=await fetch(`/api/toast-waitlist?${params}`);
+        if(res.ok){
+          const json=await res.json();
+          setData(json);
+          return;
+        }
+      }catch(e){
+        console.warn("Toast API error, falling back to mock:",e);
+      }
+    }
+    // Mock fallback
+    const wl=generateWaitlist();
+    setData({totalWaiting:wl.length,avgWait:wl[0]?.waitTime??0,nextInLine:wl.slice(0,6),source:"mock"});
   },[restaurantId]);
 
   useEffect(()=>{refresh();const t=setInterval(refresh,30000);return()=>clearInterval(t)},[refresh]);
