@@ -281,6 +281,15 @@ function ToastModal({creds,onSave,onClose,mode}){
 }
 
 /* ═══════════════════ OWNER DASHBOARD ═══════════════════ */
+function DashRow({left,right}){
+  return(
+    <div className="dash-row">
+      <div style={{display:"flex",alignItems:"center"}}>{left}</div>
+      <div style={{display:"flex",gap:10,alignItems:"center",flexWrap:"wrap"}}>{right}</div>
+    </div>
+  );
+}
+
 function OwnerDashboard({user,onBack,onLogout}){
   const [restaurant,setRestaurant]=useState(()=>DB.getRestaurant(user.restaurantId)||DEFAULT_RESTAURANTS[0]);
   const [specials,setSpecials]=useState(()=>(DB.getRestaurant(user.restaurantId)||DEFAULT_RESTAURANTS[0]).specials||[...DEFAULT_SPECIALS.slice(0,3)]);
@@ -317,13 +326,6 @@ function OwnerDashboard({user,onBack,onLogout}){
   };
 
   const saveSpecials=()=>persist({specials});
-
-  const DashRow=({left,right})=>(
-    <div className="dash-row">
-      <div style={{display:"flex",alignItems:"center"}}>{left}</div>
-      <div style={{display:"flex",gap:10,alignItems:"center",flexWrap:"wrap"}}>{right}</div>
-    </div>
-  );
 
   return(
     <div style={{width:"100vw",height:"100vh",background:"#0f172a",display:"flex",flexDirection:"column",overflow:"hidden"}}>
