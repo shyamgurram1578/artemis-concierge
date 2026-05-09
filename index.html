@@ -96,6 +96,7 @@ const DEFAULT_RESTAURANT_TEMPLATE={
 };
 
 const NAMES=["Krishnan","Sharma","Patel","Venkat","Iyer","Reddy","Subramanian","Nair","Pillai","Chandra","Srinivas","Menon","Rajan","Johnson","Kumar"];
+const TOAST_WAITLIST_URL="https://tables.toasttab.com/restaurants/d4744e4e-91cb-4394-9cc4-34ea0998cc34/joinWaitlist";
 const SIZES=[2,3,4,2,5,2,3,4,2,6,3,2,4,2,3];
 const BASE_WAITS=[5,10,15,20,25,30,35,40,45,50,55,60,65,70,75];
 
@@ -873,6 +874,11 @@ function LobbyDisplay({restaurantId,onOpenLogin}){
         </div>
         <div style={{display:"flex",alignItems:"center",gap:16}}>
           {restaurant.logoUrl&&<img src={restaurant.logoUrl} alt={restaurant.name} style={{height:"clamp(36px,8vh,76px)",objectFit:"contain",borderRadius:8}} onError={e=>e.target.style.display="none"}/>}
+          <a href={TOAST_WAITLIST_URL} target="_blank" rel="noopener noreferrer" 
+            style={{background:"linear-gradient(135deg,var(--primary),var(--accent))",color:"#000",border:"none",borderRadius:8,padding:"8px 14px",cursor:"pointer",fontSize:14,fontWeight:600,textDecoration:"none",transition:"transform 0.2s",display:"inline-block"}}>
+            📋 Waitlist
+          </a>
+          
           <button onClick={onOpenLogin} title="Admin / Owner Login"
             style={{background:"rgba(255,255,255,.05)",border:"1px solid rgba(255,255,255,.1)",color:"rgba(255,255,255,.2)",borderRadius:8,padding:"6px 10px",cursor:"pointer",fontSize:16}}>⚙</button>
         </div>
